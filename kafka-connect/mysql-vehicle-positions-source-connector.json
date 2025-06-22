@@ -1,0 +1,14 @@
+{
+  "name": "mysql-vehicle-positions-source-connector",
+  "config": {
+    "connector.class": "io.confluent.connect.jdbc.JdbcSourceConnector",
+    "tasks.max": "3",
+    "connection.url": "jdbc:mysql://192.168.56.1:3306/vehicles",
+    "connection.user": "root",
+    "connection.password": "pass",
+    "table.whitelist": "vehicle_positions",
+    "mode": "incrementing",
+    "incrementing.column.name": "internal_id",
+    "poll.interval.ms": "5000"
+  }
+}
