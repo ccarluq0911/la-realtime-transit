@@ -1,0 +1,19 @@
+---
+startDelaySeconds: 0
+ssl: false
+lowercaseOutputName: true
+lowercaseOutputLabelNames: true
+whitelistObjectNames:
+  - "kafka.controller:*"
+  - "kafka.server:type=BrokerTopicMetrics,*"
+  - "kafka.server:type=KafkaRequestHandlerPool,*"
+  - "kafka.server:type=ReplicaManager,*"
+  - "kafka.network:type=RequestMetrics,*"
+  - "kafka.server:type=KafkaServer,*"
+  - "kafka.log:type=LogFlushStats,*"
+  - "kafka.server:type=SessionExpireListener,*"
+  - "kafka.server:type=FetchQueuePurgatory,*"
+  - "kafka.server:type=ProducerQueuePurgatory,*"
+  - "kafka.server:type=DelayedOperationPurgatory,*"
+rules:
+  - pattern: ".*"

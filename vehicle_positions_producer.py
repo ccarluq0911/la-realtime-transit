@@ -8,7 +8,7 @@ import signal
 import sys
 import logging
 import random
-from datetime import datetime, timedelta
+from datetime import datetime
 from google.protobuf.message import DecodeError
 from google.transit import gtfs_realtime_pb2
 
@@ -20,30 +20,39 @@ logging.basicConfig(
 )
 
 # MySQL connection parameters
-DB_HOST = "localhost"
-DB_PORT = 3306
-DB_NAME = "vehicles"
-DB_USER = "root"
-DB_PASSWORD = "pass"
+DB_HOST = os.getenv("DB_HOST", "localhost")
+DB_PORT = int(os.getenv("DB_PORT", "3306"))
+DB_NAME = os.getenv("DB_NAME", "vehicles")
+DB_USER = os.getenv("DB_USER", "root")
+DB_PASSWORD = os.getenv("DB_PASSWORD", "pass")
 
 # Time connection parameter (seconds)
 TIME = 10
 
 # Set para guardar la última parada de cada vehículo
 last_stops = {}
+stop_event = threading.Event()
+
+def connect_db_with_retry():
+    delay = 2
+    max_delay = 30
+
+    while not stop_event.is_set():
+        try:
+            return mysql.connector.connect(
+                host=DB_HOST,
+                port=DB_PORT,
+                user=DB_USER,
+                password=DB_PASSWORD,
+                database=DB_NAME
+            )
+        except Exception as e:
+            logging.warning(f"Database connection failed, retrying in {delay}s: {e}")
+            time.sleep(delay)
+            delay = min(delay * 2, max_delay)
 
 # Conexión a MySQL
-try:
-    conn_db = mysql.connector.connect(
-        host=DB_HOST,
-        port=DB_PORT,
-        user=DB_USER,
-        password=DB_PASSWORD,
-        database=DB_NAME
-    )
-except Exception as e:
-    logging.error(f"Database connection failed: {e}")
-    exit(1)
+conn_db = connect_db_with_retry()
 
 cur = conn_db.cursor()
 
@@ -65,7 +74,6 @@ CREATE TABLE IF NOT EXISTS vehicle_positions (
 conn_db.commit()
 
 batch_queue = queue.Queue()
-stop_event = threading.Event()
 
 def check_stop_event(bus_id, vehicle_stop):
     if bus_id not in last_stops:
@@ -120,7 +128,7 @@ def fetch_data():
                         vehicle.current_stop_sequence,
                         status,
                         check_stop_event(entity.id, vehicle.current_stop_sequence),
-                        datetime.fromtimestamp(vehicle.timestamp) - timedelta(hours=9)
+                        datetime.fromtimestamp(vehicle.timestamp)
                     )
                     records.append(record)
 
@@ -140,7 +148,6 @@ def fetch_data():
                 for batch in batches:
                     batch_queue.put(batch)
 
-                logging.info(f"Fetched {num_records} records. Split into {TIME} batches.")
             else:
                 for _ in range(TIME):
                     batch_queue.put([])
@@ -172,7 +179,6 @@ def write_data():
                 """
                 cur.executemany(insert_query, batch)
                 conn_db.commit()
-                logging.info(f"Inserted {len(batch)} records into DB.")
             else:
                 logging.info("Empty batch. No insert.")
         except queue.Empty:
@@ -190,7 +196,6 @@ def signal_handler(sig, frame):
     writer_thread.join()
     cur.close()
     conn_db.close()
-    logging.info("Conexión a base de datos cerrada.")
     sys.exit(0)
 
 signal.signal(signal.SIGINT, signal_handler)
@@ -201,8 +206,5 @@ writer_thread = threading.Thread(target=write_data, daemon=True)
 fetcher_thread.start()
 writer_thread.start()
 
-logging.info("Producer iniciado. Presiona Ctrl+C para salir.")
 while not stop_event.is_set():
     time.sleep(1)
-
-#docker run -d --name mysql-kafka -p 3306:3306 -e MYSQL_ROOT_PASSWORD=pass -e MYSQL_DATABASE=vehicles -v mysql_data:/var/lib/mysql mysql:latest
