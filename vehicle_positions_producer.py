@@ -76,16 +76,24 @@ conn_db.commit()
 batch_queue = queue.Queue()
 
 def check_stop_event(bus_id, vehicle_stop):
+    # Si no tenemos registro del bus, asignamos una cantidad aleatoria de personas (0-70)
     if bus_id not in last_stops:
         amount_people = random.randint(0, 70)
         last_stops[bus_id] = (vehicle_stop, amount_people)
         return amount_people
-    elif vehicle_stop != last_stops[bus_id][0]:
-        new_amount_people = min(70, max(0, last_stops[bus_id][1] + random.randint(-5, 10)))
-        last_stops[bus_id] = (vehicle_stop, new_amount_people)
-        return new_amount_people
-    else:
+    
+    # Si el bus ha llegado a una nueva parada, hay un 40% de probabilidad de que suban o bajen personas (entre -5 y +5)
+    if vehicle_stop != last_stops[bus_id][0]:
+        if random.random() < 0.4:
+            new_amount_people = min(70, max(0, last_stops[bus_id][1] + random.randint(-5, 5)))
+            last_stops[bus_id] = (vehicle_stop, new_amount_people)
+            return new_amount_people
+        
+        last_stops[bus_id] = (vehicle_stop, last_stops[bus_id][1])
         return last_stops[bus_id][1]
+    
+    # Si el bus está en la misma parada, devolvemos la cantidad de personas actual
+    return last_stops[bus_id][1]
     
 
 def fetch_data():
