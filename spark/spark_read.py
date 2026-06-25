@@ -1,5 +1,10 @@
 import os
 
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
 from pyspark.sql import SparkSession
 from pyspark.sql.functions import (
     from_json, col, unix_timestamp, when, concat_ws,

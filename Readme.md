@@ -53,23 +53,6 @@ Para evitar superar el límite de peticiones establecido por la API GTFS en tiem
 
 En lugar de insertar todos los datos directamente en la base de datos, el script divide la respuesta en 10 minibatches, que son insertados en MySQL de forma progresiva, uno por segundo. De esta manera, se consigue un flujo de datos más constante hacia Kafka Connect y se evita una sobrecarga puntual tanto en MySQL como en el sistema de procesamiento.
 
-### Cálculo de Datos Sintéticos
-Para mejorar la capacidad de realizar Business Inteligence, se ha optado por generar sintéticamente unos datos de cantidad de usuarios por cada autobus:
-
-```
-def check_stop_event(bus_id, vehicle_stop):
-    if bus_id not in last_stops:
-        amount_people = random.randint(0, 70)
-        last_stops[bus_id] = (vehicle_stop, amount_people)
-        return amount_people
-    elif vehicle_stop != last_stops[bus_id][0]:
-        new_amount_people = min(70, max(0, last_stops[bus_id][1] + random.randint(-5, 10)))
-        last_stops[bus_id] = (vehicle_stop, new_amount_people)
-        return new_amount_people
-    else:
-        return last_stops[bus_id][1]
-```
-
 ## Esquema de Datos
 Los datos iniciales recibidos mediante la API se guardan en el siguiente formato:
 
@@ -111,16 +94,15 @@ Para el despliegue del sistema se requieren los siguientes recursos y configurac
 
 ## Despliegue con Docker Compose
 
-1. Clonar el repositorio y crear un archivo `.env` a partir de `.env.template` con la API Key:
+1. Clonar el repositorio y copiar `.env.template` a `.env`. Completar los valores requeridos:
 ```
-API_KEY=
+API_KEY=CHANGE_ME  # Solicitar en el formulario de la sección Referencias
+DB_PASSWORD=pass
+DB_NAME=vehicles
 
-MYSQL_ROOT_PASSWORD=pass
-MYSQL_DATABASE=vehicles
-
-KAFKA_CLUSTER_ID=
-
-KAFKA_CONTROLLER_DIRECTORY_ID=
+# Generar con: python scripts/generate-kafka-ids.py
+KAFKA_CLUSTER_ID=CHANGE_ME
+KAFKA_CONTROLLER_DIRECTORY_ID=CHANGE_ME
 ```
 
 2. Iniciar todos los servicios:
@@ -170,3 +152,5 @@ Si lo aplicamos en el sentido contrario, podemos estudiar la línea `Lax/Metro T
 [Enlace a la Documentación de la API](https://swiftly-inc.stoplight.io/docs/realtime-standalone/d08fc97489edb-swiftly-api-reference)
 
 [Enlace a GitLab con los datos estáticos del estándar GTFS de Los Ángeles](https://gitlab.com/LACMTA/gtfs_bus)
+
+[Formulario para solicitar la API_KEY de LA Metro](https://docs.google.com/forms/d/e/1FAIpQLScy9Jye91QPSTS3WVEU-13es0A1rT9Ep5JhAmXUZEiop7fmIw/viewform)

@@ -9,8 +9,11 @@ import sys
 import logging
 import random
 from datetime import datetime
+from dotenv import load_dotenv
 from google.protobuf.message import DecodeError
 from google.transit import gtfs_realtime_pb2
+
+load_dotenv()
 
 # Configurar logging detallado
 logging.basicConfig(
@@ -20,7 +23,7 @@ logging.basicConfig(
 )
 
 # MySQL connection parameters
-DB_HOST = os.getenv("DB_HOST", "localhost")
+DB_HOST = os.getenv("DB_HOST", "database")
 DB_PORT = int(os.getenv("DB_PORT", "3306"))
 DB_NAME = os.getenv("DB_NAME", "vehicles")
 DB_USER = os.getenv("DB_USER", "root")
@@ -51,28 +54,10 @@ def connect_db_with_retry():
             time.sleep(delay)
             delay = min(delay * 2, max_delay)
 
-# Conexión a MySQL
-conn_db = connect_db_with_retry()
-
-cur = conn_db.cursor()
-
-# Crear tabla si no existe
-cur.execute("""
-CREATE TABLE IF NOT EXISTS vehicle_positions (
-    internal_id BIGINT AUTO_INCREMENT PRIMARY KEY,
-    id VARCHAR(255) NOT NULL,
-    trip_route_id VARCHAR(255) NOT NULL,
-    trip_trip_id VARCHAR(255) NOT NULL,
-    position_latitude DOUBLE,
-    position_longitude DOUBLE,
-    current_stop_sequence INT NOT NULL,
-    current_status VARCHAR(50),
-    amount_people INT NOT NULL,
-    timestamp TIMESTAMP NOT NULL
-)
-""")
-conn_db.commit()
-
+conn_db = None
+cur = None
+fetcher_thread = None
+writer_thread = None
 batch_queue = queue.Queue()
 
 def check_stop_event(bus_id, vehicle_stop):
@@ -200,19 +185,53 @@ def write_data():
 def signal_handler(sig, frame):
     logging.info("\nFinalizando...")
     stop_event.set()
-    fetcher_thread.join()
-    writer_thread.join()
-    cur.close()
-    conn_db.close()
+    if fetcher_thread and fetcher_thread.is_alive():
+        fetcher_thread.join()
+    if writer_thread and writer_thread.is_alive():
+        writer_thread.join()
+    if cur:
+        cur.close()
+    if conn_db:
+        conn_db.close()
     sys.exit(0)
 
-signal.signal(signal.SIGINT, signal_handler)
-signal.signal(signal.SIGTERM, signal_handler)
+if __name__ == "__main__":
+    REQUIRED_VARS = {
+        "API_KEY": "API key de Swiftly para LA Metro GTFS-rt",
+    }
+    for var, description in REQUIRED_VARS.items():
+        value = os.getenv(var)
+        if not value or value == "CHANGE_ME":
+            print(f"ERROR: La variable de entorno '{var}' ({description}) no está configurada.")
+            print(f"       Copia .env.template a .env y completa el valor.")
+            sys.exit(1)
 
-fetcher_thread = threading.Thread(target=fetch_data, daemon=True)
-writer_thread = threading.Thread(target=write_data, daemon=True)
-fetcher_thread.start()
-writer_thread.start()
+    conn_db = connect_db_with_retry()
+    cur = conn_db.cursor()
 
-while not stop_event.is_set():
-    time.sleep(1)
+    cur.execute("""
+    CREATE TABLE IF NOT EXISTS vehicle_positions (
+        internal_id BIGINT AUTO_INCREMENT PRIMARY KEY,
+        id VARCHAR(255) NOT NULL,
+        trip_route_id VARCHAR(255) NOT NULL,
+        trip_trip_id VARCHAR(255) NOT NULL,
+        position_latitude DOUBLE,
+        position_longitude DOUBLE,
+        current_stop_sequence INT NOT NULL,
+        current_status VARCHAR(50),
+        amount_people INT NOT NULL,
+        timestamp TIMESTAMP NOT NULL
+    )
+    """)
+    conn_db.commit()
+
+    signal.signal(signal.SIGINT, signal_handler)
+    signal.signal(signal.SIGTERM, signal_handler)
+
+    fetcher_thread = threading.Thread(target=fetch_data, daemon=True)
+    writer_thread = threading.Thread(target=write_data, daemon=True)
+    fetcher_thread.start()
+    writer_thread.start()
+
+    while not stop_event.is_set():
+        time.sleep(1)

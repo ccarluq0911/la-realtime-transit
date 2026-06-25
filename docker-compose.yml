@@ -65,8 +65,8 @@ services:
   database:
     image: mysql:8.0
     environment:
-      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
-      MYSQL_DATABASE: ${MYSQL_DATABASE}
+      MYSQL_ROOT_PASSWORD: ${DB_PASSWORD}
+      MYSQL_DATABASE: ${DB_NAME}
     volumes:
       - db_data:/var/lib/mysql
     ports:
@@ -84,9 +84,9 @@ services:
       API_KEY: ${API_KEY}
       DB_HOST: database
       DB_PORT: 3306
-      DB_NAME: ${MYSQL_DATABASE}
+      DB_NAME: ${DB_NAME}
       DB_USER: root
-      DB_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      DB_PASSWORD: ${DB_PASSWORD}
 
   hadoop-namenode:
     image: apache/hadoop:3.4.1
@@ -144,6 +144,9 @@ services:
         condition: service_started
     env_file:
       - ./hadoop/config
+    environment:
+      GTFS_DATA_PATH: ${GTFS_DATA_PATH}
+      GTFS_ZIP_URL: ${GTFS_ZIP_URL}
     volumes:
       - ./hadoop/hdfs-init.sh:/hdfs-init.sh:ro
     command: ["/bin/bash", "/hdfs-init.sh"]
@@ -202,11 +205,11 @@ services:
     volumes:
       - ./spark:/opt/spark-app:ro
     environment:
-      KAFKA_BOOTSTRAP_SERVERS: kafka-broker-1:9092,kafka-broker-2:9093
-      HDFS_NAMENODE: hdfs://cluster-bda:8020
-      GTFS_DATA_PATH: hdfs:///bda/data/gtfs_bus
-      OUTPUT_PATH: hdfs://cluster-bda:8020/bda/data/vehicle_delays/
-      CHECKPOINT_PATH: hdfs://cluster-bda:8020/bda/data/vehicle_delays_chck/
+      KAFKA_BOOTSTRAP_SERVERS: ${KAFKA_BOOTSTRAP_SERVERS}
+      HDFS_NAMENODE: ${HDFS_NAMENODE}
+      GTFS_DATA_PATH: ${GTFS_DATA_PATH}
+      OUTPUT_PATH: ${OUTPUT_PATH}
+      CHECKPOINT_PATH: ${CHECKPOINT_PATH}
     command:
       - driver
       - --master
@@ -214,7 +217,7 @@ services:
       - --packages
       - org.apache.spark:spark-sql-kafka-0-10_2.12:3.4.1
       - --conf
-      - spark.hadoop.fs.defaultFS=hdfs://cluster-bda:8020
+      - spark.hadoop.fs.defaultFS=${HDFS_NAMENODE}
       - --conf
       - spark.jars.ivy=/tmp/.ivy2
       - --conf
@@ -247,8 +250,13 @@ services:
     depends_on:
       kafka-connect-worker-1:
         condition: service_healthy
+    environment:
+      DB_HOST: database
+      DB_PORT: 3306
+      DB_NAME: ${DB_NAME}
+      DB_USER: root
+      DB_PASSWORD: ${DB_PASSWORD}
     volumes:
-      - ./kafka-connect/mysql-vehicle-positions-source-connector.json:/connector.json:ro
       - ./kafka-connect/connector-init.sh:/connector-init.sh:ro
     command: ["/bin/sh", "/connector-init.sh"]
     restart: "no"
